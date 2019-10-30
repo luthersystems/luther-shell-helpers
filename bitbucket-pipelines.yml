@@ -1,0 +1,10 @@
+image: koalaman/shellcheck-alpine:latest
+
+pipelines:
+  pull-requests:
+    '**':
+      - parallel:
+        - step:
+            name: shellcheck
+            script:
+              - shellcheck --shell=bash *.sh
