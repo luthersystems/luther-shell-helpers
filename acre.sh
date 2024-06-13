@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 function acre_env_file {
     ENVIRONMENT=$1
     if [[ -z "$ENVIRONMENT" ]]; then

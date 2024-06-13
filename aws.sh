@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # LUTHER_AWS_ACCOUNT_MAP is a file path containing lines of space delimited
 # pairs:
 #   ALIAS   ACCOUNTID

@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # shellcheck disable=SC1090
 
 script="${BASH_SOURCE[0]:-$0}"
