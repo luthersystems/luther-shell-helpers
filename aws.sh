@@ -18,7 +18,7 @@ alias aws_unset='unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SECURITY_TOKE
 # aws_login creates an mfa-secured aws session and sets env variables for the
 # aws cli and sdks.
 function aws_login {
-    local role="${1:-testing}"
+    local role="${1:-dev}"
     local env_cmds
     if ! env_cmds="$(aws_unset; "$(_gopath)/bin/speculate" env --mfa --lifetime 43200 "$role")"; then
         return 1
@@ -26,9 +26,14 @@ function aws_login {
     eval "$env_cmds"
 }
 
-# aws_console generates and prints a url which logs the user into the aws web
-# console using their current session role.
-alias aws_console='speculate console'
+aws_console() (
+    set -eo pipefail
+    acc=$1
+    if [ -n "$acc" ]; then
+        aws_jump "$acc" admin
+    fi
+    /Applications/Firefox.app/Contents/MacOS/firefox -new-tab "$(speculate console)"
+)
 
 # aws_account_lookup locates a named aws account, aliased in the account
 # mapping file (see LUTHER_AWS_ACCOUNT_MAP).
