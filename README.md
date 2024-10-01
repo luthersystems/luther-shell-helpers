@@ -21,3 +21,25 @@ source the helpers in `.bashrc` or `.zshrc`:
 ```sh
 source ~/luther-shell-helpers/all.sh
 ```
+
+## Update your AWS Accounts Map
+
+Add your accounts and their aliases to `~/.aws/accounts`:
+(replace with actual IDs).
+
+```sh
+# ALIAS        ACCOUNT
+billing         <REPLACE>
+root            <REPLACE>
+platform-prod   <REPLACE>
+platform-test   <RPLACE>
+```
+
+## Jump around
+
+Login to your admin role, and jump to `admin` in another account:
+
+```sh
+aws_login admin
+aws_jump platform-test admin
+```
