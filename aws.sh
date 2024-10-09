@@ -24,7 +24,7 @@ function aws_login {
   local env_cmds
   if ! env_cmds="$(
     aws_unset
-    "$(_gopath)/bin/speculate" env --mfa --lifetime 43200 "$role"
+    "$(_gopath)/bin/speculate" env --mfa --lifetime 3600 "$role"
   )"; then
     return 1
   fi
@@ -37,7 +37,7 @@ aws_console() (
   if [ -n "$acc" ]; then
     aws_jump "$acc" admin
   fi
-  speculate console
+  "$(_gopath)/bin/speculate" console
 )
 
 # aws_account_lookup locates a named aws account, aliased in the account
