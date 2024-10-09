@@ -37,7 +37,7 @@ aws_console() (
   if [ -n "$acc" ]; then
     aws_jump "$acc" admin
   fi
-  echo "$(speculate console)"
+  speculate console
 )
 
 # aws_account_lookup locates a named aws account, aliased in the account
