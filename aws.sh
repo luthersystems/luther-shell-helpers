@@ -4,13 +4,16 @@
 # pairs:
 #   ALIAS   ACCOUNTID
 LUTHER_AWS_ACCOUNT_MAP="${LUTHER_AWS_ACCOUNT_MAP:-$HOME/.aws/accounts}"
-function _aws_account_map {
+function lsh_aws_account_map {
   # Strip any comments and extra trailing fields.
   [[ -r "$LUTHER_AWS_ACCOUNT_MAP" ]] || return 1
   grep -vE '^\s*#' "$LUTHER_AWS_ACCOUNT_MAP" 2>/dev/null | awk '{print $1 "\t" $2}'
 }
 
-_gopath() {
+# Private helpers are named lsh_* rather than _*: shells that snapshot the
+# user's functions (e.g. Claude Code's `!` prompt) skip underscore-prefixed
+# names as completion functions, and every public function here needs them.
+lsh_gopath() {
   go env GOPATH
 }
 
@@ -18,13 +21,16 @@ _gopath() {
 alias aws_unset='unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SECURITY_TOKEN AWS_SESSION_TOKEN'
 
 # aws_login creates an mfa-secured aws session and sets env variables for the
-# aws cli and sdks.
+# aws cli and sdks. Usage: aws_login [role] [mfa-code]. Pass the code when the
+# shell cannot prompt for it (e.g. `! aws_login admin 123456` in Claude Code).
 function aws_login {
   local role="${1:-dev}"
+  local mfa_args=()
+  [[ -n "$2" ]] && mfa_args=(--mfacode "$2")
   local env_cmds
   if ! env_cmds="$(
     aws_unset
-    "$(_gopath)/bin/speculate" env --mfa --lifetime 3600 "$role"
+    "$(lsh_gopath)/bin/speculate" env --mfa "${mfa_args[@]}" --lifetime 3600 "$role"
   )"; then
     return 1
   fi
@@ -37,7 +43,7 @@ aws_console() (
   if [ -n "$acc" ]; then
     aws_jump "$acc" admin
   fi
-  "$(_gopath)/bin/speculate" console
+  "$(lsh_gopath)/bin/speculate" console
 )
 
 # aws_account_lookup locates a named aws account, aliased in the account
@@ -45,7 +51,7 @@ aws_console() (
 function aws_account_lookup {
   local acct="$1"
   local row
-  row=$(_aws_account_map |
+  row=$(lsh_aws_account_map |
     awk -v ACCT="$acct" '$1 == ACCT' |
     head -n 1)
   if [[ -z "$row" ]]; then
@@ -75,7 +81,7 @@ function aws_jump {
   credhop --account "$acctid" "$role"
 }
 
-_display_notification() {
+lsh_display_notification() {
   local title="$1"
   local message="$2"
   osascript -e "display notification \"${message}\" with title \"${title}\""
@@ -83,7 +89,7 @@ _display_notification() {
 
 # Run the command given by "$@" in the background
 # https://unix.stackexchange.com/a/452568
-_silent_background() {
+lsh_silent_background() {
   if [[ -n $ZSH_VERSION ]]; then # zsh:  https://superuser.com/a/1285272/365890
     setopt local_options no_notify no_monitor
     "$@" &
@@ -95,9 +101,9 @@ _silent_background() {
   fi
 }
 
-_wait_clear_clipboard() {
+lsh_wait_clear_clipboard() {
   local lifetime="${CREDCOPY_CLIPBOARD_LIFETIME:-10}"
-  sleep "$lifetime" && echo | pbcopy && _display_notification 'clipboard cleared' 'clipboard contents removed'
+  sleep "$lifetime" && echo | pbcopy && lsh_display_notification 'clipboard cleared' 'clipboard contents removed'
 }
 
 # credcopy copies aws session environment variables to to the macos system
@@ -109,7 +115,7 @@ credcopy() {
     echo 'no credentials found in environment'
     return 1
   fi
-  _silent_background _wait_clear_clipboard
+  lsh_silent_background lsh_wait_clear_clipboard
   echo "$creds" | pbcopy
 }
 
@@ -128,18 +134,18 @@ credpaste() {
 # A stack of aws session credentials
 OLD_AWS_CREDS=""
 
-_stackpush() { printf "%s\t%s\n" "$1" "$2"; }
-_stackpop() { echo "$1" | cut -f2-; }
-_stacktop() { echo "$1" | cut -f1; }
+lsh_stackpush() { printf "%s\t%s\n" "$1" "$2"; }
+lsh_stackpop() { echo "$1" | cut -f2-; }
+lsh_stacktop() { echo "$1" | cut -f1; }
 
-_aws_session_json() {
+lsh_aws_session_json() {
   jq -nc '{"id":$id,"k":$k,"su":$su,"ss":$ss}' \
     --arg id "$AWS_ACCESS_KEY_ID" \
     --arg k "$AWS_SECRET_ACCESS_KEY" \
     --arg su "$AWS_SECURITY_TOKEN" \
     --arg ss "$AWS_SESSION_TOKEN"
 }
-_aws_session_from_json() {
+lsh_aws_session_from_json() {
   local json
   if ! json="$(echo "$1" | jq -c '.' | head -n 1)"; then
     echo "argument contains invalid json" >&2
@@ -149,7 +155,7 @@ _aws_session_from_json() {
   AWS_SECRET_ACCESS_KEY="$(echo "$json" | jq -r '.k')" || return 1
   AWS_SECURITY_TOKEN="$(echo "$json" | jq -r '.su')" || return 1
   AWS_SESSION_TOKEN="$(echo "$json" | jq -r '.ss')" || return 1
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SECURITY_TOKEN AWS_SESION_TOKEN
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SECURITY_TOKEN AWS_SESSION_TOKEN
 }
 
 # credhop saves the current aws session variable values and repopulates them
@@ -158,11 +164,11 @@ _aws_session_from_json() {
 credhop() {
   local obj
   if [[ -n "$AWS_ACCESS_KEY_ID" ]]; then
-    obj="$(_aws_session_json)" || return 1
-    OLD_AWS_CREDS="$(_stackpush "$obj" "$OLD_AWS_CREDS")"
+    obj="$(lsh_aws_session_json)" || return 1
+    OLD_AWS_CREDS="$(lsh_stackpush "$obj" "$OLD_AWS_CREDS")"
   fi
   local env_cmds
-  if ! env_cmds="$("$(_gopath)/bin/speculate" env "$@")"; then
+  if ! env_cmds="$("$(lsh_gopath)/bin/speculate" env "$@")"; then
     return 1
   fi
   eval "$env_cmds"
@@ -171,6 +177,6 @@ credhop() {
 # creddrop restores aws session variable values saved previously by calling
 # `credhop`.
 creddrop() {
-  _aws_session_from_json "$(_stacktop "$OLD_AWS_CREDS")" || return 1
-  OLD_AWS_CREDS="$(_stackpop "$OLD_AWS_CREDS")"
+  lsh_aws_session_from_json "$(lsh_stacktop "$OLD_AWS_CREDS")" || return 1
+  OLD_AWS_CREDS="$(lsh_stackpop "$OLD_AWS_CREDS")"
 }

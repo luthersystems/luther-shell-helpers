@@ -43,3 +43,10 @@ Login to your admin role, and jump to `admin` in another account:
 aws_login admin
 aws_jump platform-test admin
 ```
+
+If the shell can't prompt for your MFA code (for example Claude Code's `!`
+prompt), pass it as the last argument:
+
+```sh
+aws_login admin 123456
+```
