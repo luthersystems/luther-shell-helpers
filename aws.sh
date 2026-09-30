@@ -37,6 +37,57 @@ function aws_login {
   eval "$env_cmds"
 }
 
+# aws_login_op is aws_login with the MFA code read from 1Password instead of
+# typed. Usage: aws_login_op [role]. aws_admin_op is aws_login_op admin.
+#   LUTHER_OP_MFA_ITEM   1Password item that holds your AWS one-time password
+#                        (required), e.g. "Luther AWS - <you>"
+#   LUTHER_OP_MFA_VAULT  its vault (optional), e.g. Employee
+#   LUTHER_OP_ACCOUNT    1Password account (default luthersystems.1password.com).
+#                        Always passed, so op never touches your other accounts.
+# AWS refuses a code that was already used, so this waits (LUTHER_OP_MFA_WAIT
+# seconds, default 60) for one it hasn't used. Only a hash of the last code is
+# kept, in ${XDG_STATE_HOME:-~/.local/state}/luther-shell-helpers.
+function aws_login_op {
+  local role="${1:-dev}"
+  if [[ -z "${LUTHER_OP_MFA_ITEM:-}" ]]; then
+    echo "aws_login_op: set LUTHER_OP_MFA_ITEM to the 1Password item holding your AWS MFA" >&2
+    return 1
+  fi
+  local account="${LUTHER_OP_ACCOUNT:-luthersystems.1password.com}"
+  local vault_args=()
+  [[ -n "${LUTHER_OP_MFA_VAULT:-}" ]] && vault_args=(--vault "$LUTHER_OP_MFA_VAULT")
+  local state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/luther-shell-helpers"
+  local last_file="$state_dir/last-otp-hash"
+  local wait="${LUTHER_OP_MFA_WAIT:-60}"
+  local last code hash op_err waited=0
+  last="$(cat "$last_file" 2>/dev/null)"
+  op_err="$(mktemp)"
+  while :; do
+    # op's stderr never holds the code; show it so a locked app is obvious.
+    if ! code="$(op --account "$account" item get "$LUTHER_OP_MFA_ITEM" \
+      ${vault_args[@]+"${vault_args[@]}"} --otp 2>"$op_err")" || [[ -z "$code" ]]; then
+      echo "aws_login_op: op could not read a one-time password from \"$LUTHER_OP_MFA_ITEM\" in $account (unlock 1Password?):" >&2
+      cat "$op_err" >&2
+      rm -f "$op_err"
+      return 1
+    fi
+    hash="$(printf %s "$code" | shasum -a 256 | cut -c1-16)"
+    [[ "$hash" != "$last" ]] && break
+    if ((waited >= wait)); then
+      echo "aws_login_op: no unused MFA code within ${wait}s" >&2
+      rm -f "$op_err"
+      return 1
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+  rm -f "$op_err"
+  mkdir -p "$state_dir" && (umask 077 && printf %s "$hash" >"$last_file")
+  aws_login "$role" "$code"
+}
+
+aws_admin_op() { aws_login_op admin "$@"; }
+
 aws_console() (
   set -eo pipefail
   acc=$1
