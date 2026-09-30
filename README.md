@@ -50,3 +50,19 @@ prompt), pass it as the last argument:
 ```sh
 aws_login admin 123456
 ```
+
+### MFA code from 1Password
+
+`aws_login_op [role]` (and `aws_admin_op`) read the one-time password from
+1Password with `op`, so nothing is typed. Set once in your shell rc:
+
+```sh
+export LUTHER_OP_MFA_ITEM="Luther AWS - <you>"   # the item with your AWS OTP
+export LUTHER_OP_MFA_VAULT="Employee"             # optional
+# LUTHER_OP_ACCOUNT defaults to luthersystems.1password.com and is always
+# passed to op, so it never prompts your other 1Password accounts.
+```
+
+AWS rejects a code that was already used, so back-to-back logins wait for the
+next code (up to `LUTHER_OP_MFA_WAIT`, default 60 s).
+
